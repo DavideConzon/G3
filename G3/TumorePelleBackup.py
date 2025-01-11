@@ -230,42 +230,87 @@ def show_medico_or_admin_screen(user_name, user_role):
     camera_label = tk.Label(medico_admin_frame)
     camera_label.pack(pady=10)
 
+    # Add a label to show the prediction result
+    global prediction_label
+    prediction_label = tk.Label(medico_admin_frame, text="Predizione: ", font=("Arial", 14), bg='#f0f0f0', fg="blue")
+    prediction_label.pack(pady=10)
+
     back_button = tk.Button(medico_admin_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
     back_button.pack(pady=10)
 
+def classify_frame(frame, class_labels):
+    # Preprocess the frame
+    img_array = preprocess_image(frame)
 
+    # Get the model's prediction
+    predictions = model.predict(img_array)
+
+    # Get the class label with the highest score
+    max_score_index = np.argmax(predictions)
+    max_score = predictions[0, max_score_index]
+    class_label = list(class_labels.keys())[max_score_index]
+
+    # Display the class label and score on the frame
+    cv2.putText(frame, f"{class_label} ({max_score:.2f})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+    # Update the prediction label in the UI
+    if prediction_label:
+        prediction_label.config(text=f"Predizione: {class_label} ({max_score:.2f})")
+    
+    # Update the camera label with the new frame (to continuously show the updated video frame)
+    if camera_label:
+        photo = ImageTk.PhotoImage(image=Image.fromarray(frame))
+        camera_label.config(image=photo)
+        camera_label.image = photo
+
+    # Continue capturing frames from the camera (recursively call update_frame to create a loop)
+    root.after(10, update_frame, class_labels)  # Use root.after to keep the loop going
+
+
+# Update the start_camera function to pass class_labels to classify_frame
 def start_camera():
     global cap
     cap = cv2.VideoCapture(0)
-    
-    def update_frame():
-        ret, frame = cap.read()
-        if ret:
-            # Preprocessa l'immagine per il modello
-            processed_image = preprocess_image(frame)
-            
-            # Predizione
-            predictions = model.predict(processed_image)
-            print("Predizione:", predictions)
-            
-            # Converte l'immagine in formato compatibile con Tkinter
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img_tk = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
-            
-            # Aggiorna il canvas con il nuovo frame
-            camera_label.config(image=img_tk)
-            camera_label.image = img_tk
-        
-        # Riprogramma la funzione per un nuovo frame
-        root.after(10, update_frame)
 
-    update_frame()
+    # Define the class labels
+    class_labels = {
+        'Actinic Keratoses and\n Intraepithelial Carcinoma': 0,
+        'Basal Cell Carcinoma': 1,
+        'Benign Keratosis-like Lesions': 2,
+        'Dermatofibroma': 3,
+        'Melanoma': 4,
+        'Melanocytic Nevi(nei)': 5,
+        'Vascular Lesions': 6
+    }
+
+    # Start the video stream and update frames
+    update_frame(class_labels)
+
+# Modify update_frame to pass class_labels to classify_frame
+def update_frame(class_labels):
+    ret, frame = cap.read()
+    if ret:
+        # Preprocess and classify the frame
+        classify_frame(frame, class_labels)  # Pass class_labels here
+
+        # Convert the frame to RGB for Tkinter compatibility
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_tk = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
+        
+        # Update the label with the new image
+        camera_label.config(image=img_tk)
+        camera_label.image = img_tk
+    
+    # Call the function again to continuously update the video feed
+    root.after(10, update_frame, class_labels)
+
 
 def stop_camera():
     global cap
     if cap:
         cap.release()
     camera_label.config(image=None)
+
 
 def preprocess_image(frame):
     # Converte il frame in RGB
