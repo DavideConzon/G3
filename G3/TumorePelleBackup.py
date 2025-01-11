@@ -1,3 +1,6 @@
+"""PER LANCIARE PROGRAMMA, DIGITARE "conda activate gruppo3"
+    POI DIGITARE "python C:\Users\david\OneDrive\Desktop\G3\TumorePelleBackup.py"
+"""
 import tkinter as tk
 from tkinter import Tk, Canvas, Frame, PhotoImage, filedialog, messagebox, ttk
 from PIL import Image, ImageTk
