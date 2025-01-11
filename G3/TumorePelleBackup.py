@@ -2,25 +2,28 @@ import tkinter as tk
 from tkinter import Tk, Canvas, Frame, PhotoImage, filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import cv2
-import tensorflow as tf
 import numpy as np
 import os
 import csv
 import hashlib
-from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-import hashlib
 import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.metrics import top_k_categorical_accuracy
+import threading
 
+# If `top_2` is actually top_k_categorical_accuracy with k=2
+def top_2(y_true, y_pred):
+    return top_k_categorical_accuracy(y_true, y_pred, k=2)
 
-
-# Percorso del modello salvato
+# Path to the model
 MODEL_PATH = r"C:\Users\david\OneDrive\Desktop\G3\skin_cancer_best_model.h5"
+
 # Predefined user roles
 PREDEFINED_ROLES = ['Admin', 'Medico', 'User', 'Guest']
 
 # Caricamento del modello
-model = tf.keras.models.load_model(MODEL_PATH)
+model = tf.keras.models.load_model(MODEL_PATH, custom_objects={'top_2': top_2})
 
 # Variabili globali
 cap = None
@@ -222,63 +225,71 @@ def show_medico_or_admin_screen(user_name, user_role):
     stop_button = tk.Button(medico_admin_frame, text="Ferma Fotocamera", command=stop_camera, bg='#0078D7', fg='#ffffff')
     stop_button.pack(pady=10)
 
+    # Aggiungi il label per il video
+    global camera_label
+    camera_label = tk.Label(medico_admin_frame)
+    camera_label.pack(pady=10)
+
     back_button = tk.Button(medico_admin_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
     back_button.pack(pady=10)
 
+
 def start_camera():
     global cap
-    cap = cv2.VideoCapture(0)  # Usa la fotocamera predefinita
-    if not cap.isOpened():
-        messagebox.showerror("Errore", "Non è stato possibile accedere alla fotocamera!")
-        return
-
-    show_camera_feed()
-
-def show_camera_feed():
-    global cap, camera_label  # Dichiarazione globale
-    ret, frame = cap.read()
-    if ret:
-        # Converti il frame da BGR (OpenCV) a RGB
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Crea un'immagine PIL a partire dal frame
-        img = Image.fromarray(frame_rgb)
-        
-        # Ridimensiona l'immagine per adattarla alla finestra di Tkinter
-        img = img.resize((640, 480), Image.ANTIALIAS)
-        
-        # Converte l'immagine PIL in un oggetto ImageTk per poterlo visualizzare su Tkinter
-        img_tk = ImageTk.PhotoImage(img)
-        
-        # Mostra l'immagine nella finestra
-        if camera_label:  # Se 'camera_label' esiste
+    cap = cv2.VideoCapture(0)
+    
+    def update_frame():
+        ret, frame = cap.read()
+        if ret:
+            # Preprocessa l'immagine per il modello
+            processed_image = preprocess_image(frame)
+            
+            # Predizione
+            predictions = model.predict(processed_image)
+            print("Predizione:", predictions)
+            
+            # Converte l'immagine in formato compatibile con Tkinter
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img_tk = ImageTk.PhotoImage(Image.fromarray(frame_rgb))
+            
+            # Aggiorna il canvas con il nuovo frame
             camera_label.config(image=img_tk)
             camera_label.image = img_tk
-        else:
-            # Se 'camera_label' non esiste, crea la label per visualizzare il feed video
-            camera_label = tk.Label(root, image=img_tk)
-            camera_label.image = img_tk
-            camera_label.pack(pady=10)
         
-        # Continua a mostrare il feed video ogni 10ms
-        root.after(10, show_camera_feed)
-    else:
-        messagebox.showerror("Errore", "Impossibile catturare il frame dalla fotocamera!")
+        # Riprogramma la funzione per un nuovo frame
+        root.after(10, update_frame)
+
+    update_frame()
 
 def stop_camera():
     global cap
-    if cap and cap.isOpened():
-        cap.release()  # Rilascia la fotocamera
-    cv2.destroyAllWindows()
+    if cap:
+        cap.release()
+    camera_label.config(image=None)
 
-# Setup della finestra principale
-root = tk.Tk()
-root.title("Sistema Gestione Pazienti")
-root.geometry("800x600")
-root.config(bg='#f0f0f0')
+def preprocess_image(frame):
+    # Converte il frame in RGB
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-# Avvia la schermata di benvenuto
+    # Ridimensiona l'immagine alle dimensioni richieste dal modello
+    frame_resized = cv2.resize(frame_rgb, (224, 224))  # Modifica se la forma desiderata è diversa
+    
+    # Converte l'immagine in un array numpy
+    img_array = np.array(frame_resized)
+
+    # Aggiungi una dimensione extra per batch: la forma diventa (1, 1280, 1280, 3)
+    img_array = np.expand_dims(img_array, axis=0)
+
+    # Normalizza l'immagine (se il modello richiede normalizzazione)
+    img_array = img_array / 255.0
+
+    return img_array
+
+
+root = Tk()
+root.title("Sistema di Gestione Pazienti")
+root.geometry("600x500")
+
 show_welcome_screen()
 
-# Avvia il loop principale
 root.mainloop()
