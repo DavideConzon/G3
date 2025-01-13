@@ -1,311 +1,177 @@
-import tkinter as tk
-from tkinter import messagebox, ttk
-from PIL import Image, ImageTk
-import cv2
 import tensorflow as tf
+from tkinter import Tk, Label, Button, filedialog, Canvas, Frame, StringVar
+from tkinter import ttk
+from PIL import Image, ImageTk
 import numpy as np
-import os
-import csv
-from tensorflow.keras.models import load_model
+import pandas as pd
+import cv2
 
-# Percorso del modello salvato
-MODEL_PATH = "/Users/davideconzon/Desktop/G3/skin_cancer_best_model.h5"
+# Carica il modello TFLite
+interpreter = tf.lite.Interpreter(model_path= r"C:\Users\david\OneDrive\Desktop\G3\skin_cancer_best_model.tflite")
+interpreter.allocate_tensors()
 
-# Predefined user roles
-PREDEFINED_ROLES = ['Admin', 'Medico', 'User', 'Guest']
+# Ottieni dettagli sui tensori
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-#CLASSE PAZIENTE 
-class Paziente:
-    def __init__(self, nome, cognome, data_nascita, sesso, codice_fiscale, indirizzo, telefono, email, patologie_precedenti, farmaci_assunti):
-        self.nome = nome
-        self.cognome = cognome
-        self.data_nascita = data_nascita
-        self.sesso = sesso
-        self.codice_fiscale = codice_fiscale
-        self.indirizzo = indirizzo
-        self.telefono = telefono
-        self.email = email
-        self.patologie_precedenti = patologie_precedenti
-        self.farmaci_assunti = farmaci_assunti
+# Definisce le classi del modello
+class_labels = ['Actinic Keratoses and\n Intraepithelial Carcinoma', 'Basal Cell Carcinoma', 
+                'Benign Keratosis-like Lesions', 'Dermatofibroma', 'Melanoma', 
+                'Melanocytic Nevi (nei)', 'Vascular Lesions']
 
-    def visualizza_anagrafica(self):
-        return f"Nome: {self.nome} {self.cognome}\nEmail: {self.email}\nTelefono: {self.telefono}"
+# Variabile globale per l'immagine catturata
+captured_image = None
+captured_frame = None
+camera_running = False
 
+# Funzione per preprocessare l'immagine
+def preprocess_image(image):
+    image = Image.fromarray(image).convert("RGB")
+    image = image.resize((224, 224))  # Dimensione usata per il training
+    image_array = np.array(image) / 255.0
+    image_array = np.expand_dims(image_array, axis=0).astype(np.float32)  # Aggiunge dimensione batch
+    return image_array
 
-def show_welcome_screen():
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    welcome_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
-    welcome_frame.pack(fill=tk.BOTH, expand=True)
-
-    welcome_label = tk.Label(welcome_frame, text="Benvenuto! Scegli un'opzione", font=("Arial", 16), bg='#f0f0f0')
-    welcome_label.pack(pady=20)
-
-    login_button = tk.Button(welcome_frame, text="Accedi", command=show_login_screen, bg='#0078D7', fg='#ffffff')
-    login_button.pack(pady=10)
-
-    register_button = tk.Button(welcome_frame, text="Registrati", command=show_register_screen, bg='#0078D7', fg='#ffffff')
-    register_button.pack(pady=10)
-
-def show_register_screen():
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    register_frame = tk.Frame(root, bg='#ffffff', relief=tk.RAISED, bd=2)
-    register_frame.pack(side=tk.TOP, fill=tk.X, padx=20, pady=10)
-
-    tk.Label(register_frame, text="Registrazione Utente", font=("Arial", 16), bg='#ffffff').pack(pady=10)
-
-    nome_entry = tk.Entry(register_frame, width=30)
-    nome_entry.pack(pady=5)
-
-    cognome_entry = tk.Entry(register_frame, width=30)
-    cognome_entry.pack(pady=5)
-
-    ruolo_combobox = ttk.Combobox(register_frame, values=PREDEFINED_ROLES, width=28)
-    ruolo_combobox.set(PREDEFINED_ROLES[0])
-    ruolo_combobox.pack(pady=5)
-
-    email_entry = tk.Entry(register_frame, width=30)
-    email_entry.pack(pady=5)
-
-    telefono_entry = tk.Entry(register_frame, width=30)
-    telefono_entry.pack(pady=5)
-
-    password_entry = tk.Entry(register_frame, show="*", width=30)
-    password_entry.pack(pady=5)
-
-    feedback_label = tk.Label(register_frame, text="", bg='#ffffff', font=('Arial', 10, 'italic'))
-    feedback_label.pack(pady=5)
-
-    register_button = tk.Button(register_frame, text="Registra", command=register_callback, bg='#0078D7', fg='#ffffff')
-    register_button.pack(pady=10)
-
-    back_button = tk.Button(register_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
-    back_button.pack(pady=10)
-
-def show_login_screen():
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    login_frame = tk.Frame(root, bg='#ffffff', relief=tk.RAISED, bd=2)
-    login_frame.pack(side=tk.TOP, fill=tk.X, padx=20, pady=10)
-
-    tk.Label(login_frame, text="Login", font=("Arial", 16), bg='#ffffff').pack(pady=10)
-
-    email_entry = tk.Entry(login_frame, width=30)
-    email_entry.pack(pady=5)
-
-    password_entry = tk.Entry(login_frame, show="*", width=30)
-    password_entry.pack(pady=5)
-
-    login_button = tk.Button(login_frame, text="Accedi", command=lambda: login_callback(email_entry, password_entry), bg='#0078D7', fg='#ffffff')
-    login_button.pack(pady=10)
-
-    back_button = tk.Button(login_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
-    back_button.pack(pady=10)
-
-def login_callback(email_entry, password_entry):
-    email = email_entry.get()
-    password = password_entry.get()
-
-    if email == "" or password == "":
-        messagebox.showerror("Errore", "Email e Password sono obbligatori!")
-        return
-
-    with open('users.csv', 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if row[3] == email and row[5] == password:
-                user_role = row[2]
-                user_name = row[0]
-
-                if user_role == 'User':
-                    show_patient_screen(user_name)
-                elif user_role in ['Admin', 'Medico']:
-                    show_medico_or_admin_screen(user_name, user_role)
-                return
-    messagebox.showerror("Errore", "Credenziali non valide!")
-
-def show_patient_screen(user_name):
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    patient_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
-    patient_frame.pack(fill=tk.BOTH, expand=True)
-
-    patient_label = tk.Label(patient_frame, text=f"Ciao {user_name}, questi sono i tuoi dati", font=("Arial", 16), bg='#f0f0f0')
-    patient_label.pack(pady=20)
-
-    with open('users.csv', 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if row[0] == user_name:
-                user_email = row[3]
-                user_phone = row[4]
-                break
-    
-    tk.Label(patient_frame, text=f"Email: {user_email}", bg='#f0f0f0').pack(pady=5)
-    tk.Label(patient_frame, text=f"Telefono: {user_phone}", bg='#f0f0f0').pack(pady=5)
-
-    back_button = tk.Button(patient_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
-    back_button.pack(pady=20)
-
-def show_medico_or_admin_screen(user_name, user_role):
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    medico_admin_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
-    medico_admin_frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(medico_admin_frame, text=f"Ciao {user_name}, ruolo: {user_role}", font=("Arial", 16), bg='#f0f0f0').pack(pady=20)
-
-    search_label = tk.Label(medico_admin_frame, text="Cerca paziente per nome", bg='#f0f0f0')
-    search_label.pack(pady=5)
-    search_entry = tk.Entry(medico_admin_frame, width=30)
-    search_entry.pack(pady=5)
-    search_button = tk.Button(medico_admin_frame, text="Cerca", command=lambda: search_patient(search_entry.get()), bg='#0078D7', fg='#ffffff')
-    search_button.pack(pady=10)
-
-    start_button = tk.Button(medico_admin_frame, text="Avvia Fotocamera", command=start_camera, bg='#0078D7', fg='#ffffff')
-    start_button.pack(pady=10)
-
-    back_button = tk.Button(medico_admin_frame, text="Torna alla Home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
-    back_button.pack(pady=20)
-
-def search_patient(name, user_role, user_name):
-    with open('users.csv', 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if row[0].lower() == name.lower():
-                # Se è un medico, permette di compilare i dati del paziente
-                if user_role == "Medico":
-                    paziente = Paziente(nome=row[0], cognome=row[1], data_nascita=row[6], sesso=row[7], 
-                                        codice_fiscale=row[8], indirizzo="", telefono="", email=row[9],
-                                        patologie_precedenti="", farmaci_assunti="")
-                    # Associa i campi vuoti per il medico
-                    show_paziente_form(paziente, user_name)
-                else:
-                    # Se è un paziente o un altro utente, solo la visualizzazione dei dati
-                    messagebox.showinfo("Dati Paziente", paziente.visualizza_anagrafica())
-                return
-    messagebox.showerror("Errore", "Paziente non trovato!")
-
-def show_paziente_form(paziente, user_name):
-    for widget in root.winfo_children():
-        widget.destroy()
-
-    form_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
-    form_frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(form_frame, text=f"Compila i dati per {paziente.nome} {paziente.cognome}", font=("Arial", 16), bg='#f0f0f0').pack(pady=20)
-
-    # Creazione dei campi per compilare i dati del paziente
-    entry_indirizzo = tk.Entry(form_frame)
-    entry_indirizzo.insert(0, paziente.indirizzo)
-    entry_indirizzo.pack(pady=5)
-    
-    entry_telefono = tk.Entry(form_frame)
-    entry_telefono.insert(0, paziente.telefono)
-    entry_telefono.pack(pady=5)
-    
-    entry_email = tk.Entry(form_frame)
-    entry_email.insert(0, paziente.email)
-    entry_email.pack(pady=5)
-    
-    entry_patologie = tk.Entry(form_frame)
-    entry_patologie.insert(0, paziente.patologie_precedenti)
-    entry_patologie.pack(pady=5)
-
-    entry_farmaci = tk.Entry(form_frame)
-    entry_farmaci.insert(0, paziente.farmaci_assunti)
-    entry_farmaci.pack(pady=5)
-
-    btn_salva = tk.Button(form_frame, text="Salva Dati", command=lambda: salva_dati_paziente(paziente, 
-                                                                                        entry_indirizzo.get(),
-                                                                                        entry_telefono.get(),
-                                                                                        entry_email.get(),
-                                                                                        entry_patologie.get(),
-                                                                                        entry_farmaci.get()))
-    btn_salva.pack(pady=10)
-
-    back_button = tk.Button(form_frame, text="Torna alla home", command=show_welcome_screen, bg='#0078D7', fg='#ffffff')
-    back_button.pack(pady=20)
-
-def salva_dati_paziente(paziente, indirizzo, telefono, email, patologie_precedenti, farmaci_assunti):
-    paziente.indirizzo = indirizzo
-    paziente.telefono = telefono
-    paziente.email = email
-    paziente.patologie_precedenti = patologie_precedenti
-    paziente.farmaci_assunti = farmaci_assunti
-
-    # Salva i dati del paziente nel file
-    with open('patients.csv', 'a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([paziente.nome, paziente.cognome, paziente.data_nascita, paziente.sesso, paziente.codice_fiscale, paziente.indirizzo, paziente.telefono, paziente.email, paziente.patologie_precedenti, paziente.farmaci_assunti])
-
-    messagebox.showinfo("Dati Salvati", "Dati del paziente salvati correttamente!")
-    print(paziente.visualizza_anagrafica())
-
-
-def start_camera():
-    global camera, canvas, image_container, result_label
-    camera = cv2.VideoCapture(0)
-    show_frame()
-
-def show_frame():
-    ret, frame = camera.read()
-    if ret:
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(frame)
-        img = ImageTk.PhotoImage(img)
-        canvas.itemconfig(image_container, image=img)
-        canvas.image = img
-        canvas.after(10, show_frame)
-
+# Funzione per fare la previsione e visualizzare i risultati per l'immagine caricata
 def classify_image():
-    global camera, canvas, result_label
-    ret, frame = camera.read()
+    global captured_image
+    image_path = filedialog.askopenfilename()
+    if image_path:
+        # Preprocessa l'immagine
+        image = Image.open(image_path).convert("RGB")
+        image_array = preprocess_image(np.array(image))
+        
+        # Imposta l'input per l'interprete
+        interpreter.set_tensor(input_details[0]['index'], image_array)
+        interpreter.invoke()
+        predictions = interpreter.get_tensor(output_details[0]['index'])[0]
+        
+        # Visualizza immagine
+        img = image.resize((500, 500))
+        img_tk = ImageTk.PhotoImage(img)
+        canvas.itemconfig(image_container, image=img_tk)
+        canvas.image = img_tk  # Evita che l'immagine venga garbage-collected
+        captured_image = img_tk
+        
+        # Mostra i risultati
+        result_text = "Classificazione:\n"
+        for label, prob in zip(class_labels, predictions):
+            result_text += f"{label}: {prob*100:.2f}%\n"
+        
+        result_label.config(text=result_text)
+        
+        # Salva i risultati in un CSV
+        results_df = pd.DataFrame({'Class': class_labels, 'Probability': predictions * 100})
+        results_df.to_csv('classification_results.csv', index=False)
+
+# Funzione per fare la previsione e visualizzare i risultati per ogni fotogramma
+def classify_frame(frame):
+    image_array = preprocess_image(frame)
+    interpreter.set_tensor(input_details[0]['index'], image_array)
+    interpreter.invoke()
+    predictions = interpreter.get_tensor(output_details[0]['index'])[0]
+    
+    result_text = "Classificazione:\n"
+    for label, prob in zip(class_labels, predictions):
+        result_text += f"{label}: {prob * 100:.2f}%\n"
+    
+    result_label.config(text=result_text)
+
+# Funzione per catturare un'immagine dalla videocamera
+def capture_image():
+    global captured_image, captured_frame, camera_running
+    camera_running = False  # Ferma il flusso della videocamera
+    selected_camera = int(camera_selection.get())
+    cap = cv2.VideoCapture(selected_camera)
+    ret, frame = cap.read()
     if ret:
-        frame_resized = cv2.resize(frame, (224, 224))
-        frame_normalized = frame_resized / 255.0
-        frame_expanded = np.expand_dims(frame_normalized, axis=0)
-        prediction = model.predict(frame_expanded)
-        if prediction[0][0] > 0.5:
-            result_label.config(text="Classificazione: Cancro della pelle Rilevato", fg='red')
+        captured_frame = frame  # Memorizza il frame catturato
+        cv2.imwrite("captured_image.jpg", frame)
+        print("Immagine catturata e salvata come 'captured_image.jpg'")
+        # Mostra l'immagine catturata
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame_rgb)
+        img = img.resize((500, 500))
+        img_tk = ImageTk.PhotoImage(img)
+        canvas.itemconfig(image_container, image=img_tk)
+        canvas.image = img_tk
+        captured_image = img_tk
+    cap.release()
+
+# Funzione per avviare la videocamera
+def start_camera():
+    global captured_image, captured_frame, camera_running
+    camera_running = True  # Imposta lo stato della videocamera
+    selected_camera = int(camera_selection.get())
+    captured_image = None  # Resetta l'immagine catturata
+    captured_frame = None  # Resetta il frame catturato
+    cap = cv2.VideoCapture(selected_camera)
+    
+    while cap.isOpened() and camera_running:
+        ret, frame = cap.read()
+        if ret:
+            # Ridimensiona e visualizza il frame in Tkinter solo se non c'è un'immagine catturata
+            if captured_image is None:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                img = img.resize((500, 500))
+                img_tk = ImageTk.PhotoImage(img)
+                canvas.itemconfig(image_container, image=img_tk)
+                canvas.image = img_tk
+                
+                # Effettua la classificazione
+                classify_frame(frame_rgb)
+            
+            root.update_idletasks()
+            root.update()
         else:
-            result_label.config(text="Classificazione: Non Cancro della pelle", fg='green')
+            break
+    
+    cap.release()
 
-def load_skin_cancer_model():
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH)
-        return model
-    except Exception as e:
-        messagebox.showerror("Errore", f"Errore nel caricamento del modello: {str(e)}")
-        return None
+# Imposta l'interfaccia grafica con layout diviso
+root = Tk()
+root.title("Skin Cancer Classification")
+root.geometry("1200x700")
+style = ttk.Style()
+style.theme_use("clam")
 
-def create_gui():
-    global root, model
-    root = tk.Tk()
-    root.title("Skin Cancer Detection")
+# Stile per pulsanti e etichette
+style.configure("TButton", font=("Arial", 8), padding=3)
+style.configure("TLabel", font=("Arial", 10), padding=3, background="#f0f0f0")
 
-    model = load_skin_cancer_model()
-    if model is None:
-        messagebox.showerror("Errore", "Impossibile caricare il modello")
-        return
+# Frame principale
+main_frame = Frame(root, bg="#e6e6e6")
+main_frame.pack(fill="both", expand=True)
 
-    button_frame = tk.Frame(root)
-    button_frame.pack()
+# Frame sinistro per l'immagine
+left_frame = Frame(main_frame, bg="#e6e6e6", width=600)
+left_frame.pack(side="left", fill="both", expand=True)
 
-    login_button = tk.Button(button_frame, text="Login", command=show_login_screen)
-    login_button.pack(side=tk.LEFT)
+canvas = Canvas(left_frame, width=500, height=500, bg="#d9d9d9", bd=0)
+canvas.pack(pady=20)
+image_container = canvas.create_image(0, 0, anchor="nw")
 
-    register_button = tk.Button(button_frame, text="Registrati", command=show_register_screen)
-    register_button.pack(side=tk.LEFT)
+# Frame destro per i tasti e risultati
+right_frame = Frame(main_frame, bg="#f0f0f0")
+right_frame.pack(side="right", fill="both", expand=True)
 
-    root.mainloop()
+camera_selection = StringVar(value="0")
+camera_dropdown_label = Label(right_frame, text="Seleziona Videocamera:", bg="#f0f0f0", font=("Arial", 10))
+camera_dropdown_label.pack(pady=5)
+camera_dropdown = ttk.Combobox(right_frame, textvariable=camera_selection, values=["0", "1", "2"], state="readonly")
+camera_dropdown.pack(pady=5)
 
+btn_camera = ttk.Button(right_frame, text="Avvia Videocamera", command=start_camera)
+btn_camera.pack(pady=5)
 
-if __name__ == "__main__":
-    create_gui()
+btn_load_image = ttk.Button(right_frame, text="Carica Immagine", command=classify_image)
+btn_load_image.pack(pady=5)
+
+btn_capture_image = ttk.Button(right_frame, text="Cattura Immagine", command=capture_image)
+btn_capture_image.pack(pady=5)
+
+result_label = ttk.Label(right_frame, text="Classificazione:", justify="left", background="#f0f0f0", anchor="n", font=("Arial", 12, "bold"))
+result_label.pack(pady=10, padx=10, fill="both", expand=True)
+
+root.mainloop()
