@@ -10,6 +10,9 @@ import threading
 import tensorflow as tf
 import pandas as pd  
 
+import sqlite3
+from db import Database
+
 """FUNZIONAMENTO DI ACQUISIZIONE E ANALISI DA FOTOCAMERA"""
 # Global variables for camera and model
 global result_label, cap, camera_thread, interpreter, camera_selection
@@ -149,6 +152,7 @@ def start_camera():
 
     update_frame()  # Start frame update
 
+
 def show_camera_screen(user_name, user_role):
     global canvas, image_container
     for widget in root.winfo_children():
@@ -160,12 +164,11 @@ def show_camera_screen(user_name, user_role):
     tk.Label(camera_frame, text=f"Welcome {user_name}, Role: {user_role}", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
 
     # Add Back Button
-    back_button = ttk.Button(camera_frame, text="Back", command=show_welcome_screen)  # Adjust to show_login_screen if needed
+    back_button = ttk.Button(camera_frame, text="Back", command=show_login_screen)
     back_button.pack(pady=10)
 
     global camera_selection
-    # Camera selection dropdown
-    camera_selection = StringVar(value="0")
+    camera_selection = StringVar(value="0")  # Set default to first camera
     camera_dropdown_label = tk.Label(camera_frame, text="Select Camera:", bg="#ffffff", font=("Arial", 12))
     camera_dropdown_label.pack(pady=5)
 
@@ -193,7 +196,6 @@ def show_camera_screen(user_name, user_role):
     canvas = tk.Canvas(camera_frame, width=500, height=500)
     canvas.pack(pady=20)
     image_container = canvas.create_image(250, 250, anchor=tk.CENTER)
-
 # Function to stop the camera
 def stop_camera():
     global camera_running
@@ -201,9 +203,8 @@ def stop_camera():
 
 
 """FUNZIONALITA' DI LOGIN/REGISTER"""
-# Show welcome screen as the first screen
-
-
+# Initialize database
+db = Database()
 
 # Patient class
 class Paziente:
@@ -221,161 +222,43 @@ class Paziente:
 
     def visualizza_anagrafica(self):
         return f"Nome: {self.nome} {self.cognome}\nEmail: {self.email}\nTelefono: {self.telefono}"
-    
-# Funzione per hash della password
-def hash_password(password):
-    # Genera l'hash della password utilizzando SHA-256
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
-
-# Funzione per la registrazione utente
-def register_user(name, role, email, password):
-    # Controlla che tutti i campi siano compilati
-    if not all([name, role, email, password]):
-        messagebox.showerror("Errore", "Tutti i campi sono obbligatori!")
-        return
-
-    # Esegue il salvataggio sicuro della password
-    hashed_password = hash_password(password)
-
-    # Salva i dati nel file CSV
-    try:
-        with open('users.csv', 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([name, role, email, hashed_password])
-        messagebox.showinfo("Registrazione", "Registrazione completata con successo!")
-    except Exception as e:
-        messagebox.showerror("Errore", f"Errore durante la registrazione: {e}")
-
-# Function to show the login screen
-def show_login_screen():
-    login_frame = tk.Frame()
-    login_frame.pack(fill=tk.BOTH, expand=True)
-
-    tk.Label(login_frame, text="Login", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
-
-    tk.Label(login_frame, text="Email:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    email_entry = tk.Entry(login_frame, font=("Arial", 12))
-    email_entry.pack(pady=5)
-
-    tk.Label(login_frame, text="Password:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    password_entry = tk.Entry(login_frame, font=("Arial", 12), show="*")
-    password_entry.pack(pady=5)
-
-    login_button = ttk.Button(login_frame, text="Login", command=lambda: login_callback(email_entry, password_entry))
-    login_button.pack(pady=20)
-
-    register_button = ttk.Button(login_frame, text="Register", command=show_registration_screen)
-    register_button.pack(pady=10)
 
 # Function to hash the password
 def hash_password(password):
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
-# Function to login user
-def login_user(email, password):
-    try:
-        with open('users.csv', 'r') as file:
-            for row in csv.reader(file):
-                if row[3] == email:  # Check if the email exists
-                    # Extract the stored hashed password
-                    stored_hashed_password = row[5]
-                    
-                    # Hash the entered password and compare with the stored hashed password
-                    if hash_password(password) == stored_hashed_password:
-                        # If the passwords match, proceed with login
-                        messagebox.showinfo("Successo", "Login effettuato con successo!")
-                        show_patient_screen(row[0])  # Assuming the first column is the user's name
-                        return
-                    else:
-                        # If the passwords do not match
-                        messagebox.showerror("Errore", "Password errata!")
-                        return
-            
-            # If no matching email is found
-            messagebox.showerror("Errore", "Email non registrata!")
-    except FileNotFoundError:
-        messagebox.showerror("Errore", "Il file CSV non esiste!")
-    except Exception as e:
-        messagebox.showerror("Errore", f"Errore durante il login: {e}")
-
-# Login callback function
-def login_callback(email_entry, password_entry):
-    email = email_entry.get()
-    password = password_entry.get()
-
-    if not email or not password:
-        messagebox.showerror("Error", "Email and Password are required!")
+# Function to register a user
+def register_user(name, role, email, password):
+    if not all([name, role, email, password]):
+        messagebox.showerror("Errore", "Tutti i campi sono obbligatori!")
         return
 
     hashed_password = hash_password(password)
-    
-    with open('users.csv', 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if row[2] == email and row[3] == hashed_password:
-                user_role = row[1]
-                user_name = row[0]
-                show_camera_screen(user_name, user_role)  # Switch to the camera screen
-                return
-    messagebox.showerror("Error", "Invalid credentials!")
 
-def show_patient_screen(name):
-    clear_frame()
-    tk.Label(root, text=f"Ciao {name}", font=("Arial", 16)).pack(pady=20)
+    if db.register_user(name, role, email, hashed_password):  # Use the method from Database class
+        messagebox.showinfo("Registrazione", "Registrazione completata con successo!")
+    else:
+        messagebox.showerror("Errore", "Errore durante la registrazione: Email già registrata.")
 
-# Function to show the registration screen
-def show_registration_screen():
-    for widget in root.winfo_children():
-        widget.destroy()
+# Function to login a user
+def login_user(email, password):
+    if not email or not password:
+        messagebox.showerror("Errore", "Email e Password sono obbligatorie!")
+        return
 
-    # Frame di registrazione
-    register_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
-    register_frame.pack(fill=tk.BOTH, expand=True)
+    hashed_password = hash_password(password)
+    user = db.authenticate_user(email, hashed_password)  # Use the method from Database class
 
-    tk.Label(register_frame, text="Registrazione", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
+    if user:
+        messagebox.showinfo("Successo", "Login effettuato con successo!")
+        name, role = user
+        show_role_screen(name, role)
+    else:
+        messagebox.showerror("Errore", "Credenziali non valide!")
 
-    # Campo Nome
-    tk.Label(register_frame, text="Nome:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    name_entry = tk.Entry(register_frame, font=("Arial", 12))
-    name_entry.pack(pady=5)
-
-    # Campo Ruolo (con dropdown)
-    tk.Label(register_frame, text="Ruolo:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    role_var = tk.StringVar(register_frame)
-    role_var.set("Seleziona un ruolo")  # Valore predefinito
-    roles = ["Admin", "Medico", "User", "Guest"]
-    role_menu = tk.OptionMenu(register_frame, role_var, *roles)
-    role_menu.config(font=("Arial", 12), bg="#ffffff", fg="#333")
-    role_menu.pack(pady=5)
-
-    # Campo Email
-    tk.Label(register_frame, text="Email:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    email_entry = tk.Entry(register_frame, font=("Arial", 12))
-    email_entry.pack(pady=5)
-
-    # Campo Password
-    tk.Label(register_frame, text="Password:", bg="#ffffff", font=("Arial", 12)).pack(pady=5)
-    password_entry = tk.Entry(register_frame, font=("Arial", 12), show="*")
-    password_entry.pack(pady=5)
-
-    # Azione registrazione
-    def register_action():
-        name = name_entry.get()
-        role = role_var.get()
-        email = email_entry.get()
-        password = password_entry.get()
-        if name and role != "Seleziona un ruolo" and email and password:
-            register_user(name, role, email, password)
-        else:
-            messagebox.showerror("Errore", "Tutti i campi sono obbligatori!")
-
-    # Pulsante di registrazione
-    register_button = ttk.Button(register_frame, text="Registrati", command=register_action)
-    register_button.pack(pady=20)
-
-# Welcome screen function
 def show_welcome_screen():
-    global camera_label
+    global camera_label, result_label, canvas, image_container, user_name, user_role
+
     # Stop the camera if it is running
     stop_camera()
     camera_label = None
@@ -392,15 +275,17 @@ def show_welcome_screen():
     tk.Label(welcome_frame, text="Benvenuto nel Sistema di Gestione Pazienti",
              font=("Arial", 20, "bold"), bg="#f7f9fc", fg="#333").pack(pady=30)
 
-    # Add a logo or image placeholder
+    # Optional logo handling
     try:
         logo_image = Image.open("logo.png")  # Replace with your logo path
         logo_image = logo_image.resize((150, 150))  # Resize as needed
         logo_photo = ImageTk.PhotoImage(logo_image)
-        tk.Label(welcome_frame, image=logo_photo, bg="#f7f9fc").pack()
-        welcome_frame.logo_image = logo_photo  # Avoid garbage collection
+        logo_label = tk.Label(welcome_frame, image=logo_photo, bg="#f7f9fc")
+        logo_label.pack()
+        welcome_frame.logo_image = logo_photo  # Keep reference to avoid garbage collection
     except Exception as e:
         print(f"Could not load logo: {e}")
+        # If the logo fails to load, just continue without it
 
     # Buttons for Login and Registration
     button_style = {"font": ("Arial", 14, "bold"), "bg": "#4CAF50", "fg": "white", "activebackground": "#45a049"}
@@ -411,12 +296,156 @@ def show_welcome_screen():
     tk.Label(welcome_frame, text="Gestione completa per pazienti e analisi mediche",
              font=("Arial", 10, "italic"), bg="#f7f9fc", fg="#666").pack(pady=30)
 
-def show_role_screen(name, role):
-    clear_frame()
-    tk.Label(root, text=f"Ciao {name}, Ruolo: {role}", font=("Arial", 16)).pack(pady=20)
-    tk.Button(root, text="Avvia Fotocamera", command=start_camera).pack(pady=10)
-    tk.Button(root, text="Ferma Fotocamera", command=stop_camera).pack(pady=10)
+    # Additional logic for user roles: Medico or Admin
+    if user_role:
+        tk.Label(welcome_frame, text=f"Benvenuto {user_name}, come {user_role}",
+                 font=("Arial", 14, "bold"), bg="#f7f9fc", fg="#333").pack(pady=20)
 
+        # Add a "Back" button for returning to the login or welcome screen
+        back_button = ttk.Button(welcome_frame, text="Back", command=show_login_screen)
+        back_button.pack(pady=10)
+
+def show_patient_screen(name, email):
+    clear_frame()
+
+    # Fetch patient details from the database
+    conn = sqlite3.connect('app_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM patients WHERE email = ?", (email,))
+    patient_data = cursor.fetchone()
+    conn.close()
+
+    if patient_data:
+        paziente = Paziente(*patient_data[1:])  # Ignoring the ID which is the first column
+        tk.Label(root, text=f"Welcome, {paziente.nome} {paziente.cognome}", font=("Arial", 16)).pack(pady=20)
+        # You can now display attributes from the `Paziente` object, e.g.
+        tk.Label(root, text=f"Date of Birth: {paziente.data_nascita}", font=("Arial", 12)).pack(pady=5)
+        # Continue for other attributes
+    else:
+        tk.Label(root, text="No patient information found.", font=("Arial", 16)).pack(pady=20)
+
+    
+# Function to show login screen
+def show_login_screen():
+    clear_frame()
+    login_frame = tk.Frame(root)
+    login_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Create back button
+    create_back_button(login_frame, show_welcome_screen)
+
+
+    tk.Label(login_frame, text="Login", font=("Arial", 16)).pack(pady=20)
+
+    tk.Label(login_frame, text="Email:").pack()
+    email_entry = tk.Entry(login_frame)
+    email_entry.pack(pady=5)
+
+    tk.Label(login_frame, text="Password:").pack()
+    password_entry = tk.Entry(login_frame, show="*")
+    password_entry.pack(pady=5)
+
+    ttk.Button(login_frame, text="Login", command=lambda: login_user(email_entry.get(), password_entry.get())).pack(pady=10)
+    ttk.Button(login_frame, text="Registrati", command=show_registration_screen).pack()
+
+# Function to show registration screen
+def show_registration_screen():
+    clear_frame()
+    register_frame = tk.Frame(root)
+    register_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Create back button
+    create_back_button(register_frame, show_welcome_screen)
+
+
+    tk.Label(register_frame, text="Registrazione", font=("Arial", 16)).pack(pady=20)
+
+    tk.Label(register_frame, text="Nome:").pack()
+    name_entry = tk.Entry(register_frame)
+    name_entry.pack(pady=5)
+
+    tk.Label(register_frame, text="Ruolo:").pack()
+    role_var = tk.StringVar(value="Seleziona un ruolo")
+    roles = ["Admin", "Medico", "User", "Guest"]
+    role_menu = tk.OptionMenu(register_frame, role_var, *roles)
+    role_menu.pack(pady=5)
+
+    tk.Label(register_frame, text="Email:").pack()
+    email_entry = tk.Entry(register_frame)
+    email_entry.pack(pady=5)
+
+    tk.Label(register_frame, text="Password:").pack()
+    password_entry = tk.Entry(register_frame, show="*")
+    password_entry.pack(pady=5)
+
+    ttk.Button(register_frame, text="Registrati", command=lambda: register_user(
+        name_entry.get(), role_var.get(), email_entry.get(), password_entry.get())).pack(pady=10)
+
+# Utility to clear the frame
+def clear_frame():
+    for widget in root.winfo_children():
+        widget.destroy()
+
+# Function to show the role screen
+def show_role_screen(user_name, user_role):
+    global camera_selection, result_label, canvas, image_container
+
+    # Clear the current screen
+    for widget in root.winfo_children():
+        widget.destroy()
+
+     # Set up the role-specific screen (Medico or Admin)
+    role_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
+    role_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Create the "Back" button that will take the user to the welcome screen
+    back_button = ttk.Button(role_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
+    back_button.pack(pady=10)
+
+    # Set up the camera frame
+    camera_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
+    camera_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Display user name and role
+    tk.Label(camera_frame, text=f"Welcome {user_name}, Role: {user_role}", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
+
+    # Camera selection dropdown
+    camera_selection = StringVar(value="0")
+    camera_dropdown_label = tk.Label(camera_frame, text="Select Camera:", bg="#ffffff", font=("Arial", 12))
+    camera_dropdown_label.pack(pady=5)
+
+    camera_dropdown = ttk.Combobox(camera_frame, textvariable=camera_selection, values=["0", "1", "2"], state="readonly")
+    camera_dropdown.pack(pady=10)
+
+    # Buttons to control camera
+    btn_start_camera = ttk.Button(camera_frame, text="Start Camera", command=start_camera)
+    btn_start_camera.pack(pady=10)
+
+    btn_stop_camera = ttk.Button(camera_frame, text="Stop Camera", command=stop_camera)
+    btn_stop_camera.pack(pady=10)
+
+    # Button to load and classify image
+    btn_load_image = ttk.Button(camera_frame, text="Load Image", command=classify_image)
+    btn_load_image.pack(pady=10)
+
+    # Button to capture an image
+    btn_capture_image = ttk.Button(camera_frame, text="Capture Image", command=capture_image)
+    btn_capture_image.pack(pady=10)
+
+    # Results label for classification
+    result_label = ttk.Label(camera_frame, text="Classification:", justify="left", background="#ffffff", anchor="n", font=("Arial", 12, "bold"))
+    result_label.pack(pady=20, padx=10, fill="both", expand=True)
+
+    # Create a canvas for displaying the image
+    canvas = tk.Canvas(camera_frame, width=500, height=500)
+    canvas.pack(pady=20)
+    image_container = canvas.create_image(250, 250, anchor=tk.CENTER)
+
+    # Back Button to go to previous screen
+    back_button = ttk.Button(camera_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
+    back_button.pack(pady=10)
+
+#Function to create back button
 def create_back_button(parent, back_command):
     back_button = tk.Button(parent, text="Back", command=back_command)
     back_button.pack(pady=10)
@@ -426,9 +455,9 @@ def create_back_button(parent, back_command):
 def main():
     global root
     root = tk.Tk()
-    root.title("Skin Cancer Classification")
+    root.title("Sistema di Gestione Pazienti")
     root.geometry("800x600")
-    show_welcome_screen()
+    show_login_screen()
     root.mainloop()
 
 if __name__ == "__main__":
