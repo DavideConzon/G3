@@ -252,7 +252,7 @@ def login_user(email, password):
     if user:
         messagebox.showinfo("Successo", "Login effettuato con successo!")
         name, role = user
-        show_role_screen(name, role)
+        show_role_screen(name, role)  # Rimuovi il parametro password qui
     else:
         messagebox.showerror("Errore", "Credenziali non valide!")
 
@@ -394,7 +394,7 @@ def show_role_screen(user_name, user_role):
     for widget in root.winfo_children():
         widget.destroy()
 
-     # Set up the role-specific screen (Medico or Admin)
+    # Set up the role-specific screen (Medico or Admin)
     role_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
     role_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -402,12 +402,17 @@ def show_role_screen(user_name, user_role):
     back_button = ttk.Button(role_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
     back_button.pack(pady=10)
 
-    # Set up the camera frame
+    # Display user name and role
+    tk.Label(role_frame, text=f"Welcome {user_name}, Role: {user_role}", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
+
+    # Modifica della chiamata nel bottone
+    register_patient_button = ttk.Button(role_frame, text="Registra Paziente", command=lambda: show_patient_registration_screen(user_name, user_role))
+    register_patient_button.pack(pady=20)
+
+
+    # Set up the camera frame (existing functionality)
     camera_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
     camera_frame.pack(fill=tk.BOTH, expand=True)
-
-    # Display user name and role
-    tk.Label(camera_frame, text=f"Welcome {user_name}, Role: {user_role}", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
 
     # Camera selection dropdown
     camera_selection = StringVar(value="0")
@@ -417,7 +422,7 @@ def show_role_screen(user_name, user_role):
     camera_dropdown = ttk.Combobox(camera_frame, textvariable=camera_selection, values=["0", "1", "2"], state="readonly")
     camera_dropdown.pack(pady=10)
 
-    # Buttons to control camera
+    # Buttons to control camera (existing functionality)
     btn_start_camera = ttk.Button(camera_frame, text="Start Camera", command=start_camera)
     btn_start_camera.pack(pady=10)
 
@@ -432,7 +437,7 @@ def show_role_screen(user_name, user_role):
     btn_capture_image = ttk.Button(camera_frame, text="Capture Image", command=capture_image)
     btn_capture_image.pack(pady=10)
 
-    # Results label for classification
+    # Results label for classification (existing functionality)
     result_label = ttk.Label(camera_frame, text="Classification:", justify="left", background="#ffffff", anchor="n", font=("Arial", 12, "bold"))
     result_label.pack(pady=20, padx=10, fill="both", expand=True)
 
@@ -445,11 +450,75 @@ def show_role_screen(user_name, user_role):
     back_button = ttk.Button(camera_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
     back_button.pack(pady=10)
 
-#Function to create back button
+
+# Funzione per mostrare la schermata di registrazione del paziente
+def show_patient_registration_screen(user_name, user_role):
+    clear_frame()
+
+    # Crea il frame per la registrazione del paziente
+    registration_frame = tk.Frame(root, bg='#f7f9fc', padx=20, pady=20)
+    registration_frame.pack(fill=tk.BOTH, expand=True)
+
+    # Titolo del form
+    tk.Label(registration_frame, text="Registra Paziente", font=("Arial", 16, "bold"), bg='#f7f9fc').pack(pady=20)
+
+    # Form dei dettagli del paziente
+    fields = ["Nome", "Cognome", "Data di Nascita", "Sesso", "Codice Fiscale", "Indirizzo", "Telefono", "Email", "Patologie Precedenti", "Farmaci Assunti"]
+    entries = {}
+
+    for field in fields:
+        tk.Label(registration_frame, text=field + ":").pack(pady=5)
+        entry = tk.Entry(registration_frame)
+        entry.pack(pady=5)
+        entries[field] = entry
+
+    # Frame per i pulsanti "Salva Paziente" e "Indietro"
+    buttons_frame = tk.Frame(registration_frame, bg='#f7f9fc')
+    buttons_frame.pack(fill=tk.X, pady=20)
+
+    # Bottone per inviare i dati del paziente (a sinistra)
+    submit_button = ttk.Button(buttons_frame, text="Salva Paziente", command=lambda: save_patient(entries, user_name))
+    submit_button.pack(side=tk.LEFT, padx=10)
+
+    # Bottone per tornare alla schermata precedente (a destra)
+    create_back_button(buttons_frame, lambda: show_role_screen(user_name, user_role))
+    buttons_frame.pack()
+
+
+
+# Function to save patient data
+def save_patient(entries, user_name):
+    # Extract values from the entries
+    patient_data = {field: entries[field].get() for field in entries}
+
+    # Check for missing fields
+    if any(value == "" for value in patient_data.values()):
+        messagebox.showerror("Errore", "Tutti i campi sono obbligatori!")
+        return
+
+    # Retrieve the user_id from the current session
+    db = Database()
+    user = db.authenticate_user(user_name, password)  # Passing user_name and password
+    if user:
+        user_id = user[0]  # The user ID is the first element returned
+
+        # Call the add_patient method to save the patient's data
+        if db.add_patient(patient_data["Nome"], patient_data["Cognome"], patient_data["Data di Nascita"],
+                          patient_data["Sesso"], patient_data["Codice Fiscale"], patient_data["Indirizzo"],
+                          patient_data["Telefono"], patient_data["Email"], patient_data["Patologie Precedenti"],
+                          patient_data["Farmaci Assunti"], user_id):
+            messagebox.showinfo("Successo", "Paziente registrato con successo!")
+        else:
+            messagebox.showerror("Errore", "Codice Fiscale già esistente!")
+    else:
+        messagebox.showerror("Errore", "Utente non autenticato!")
+    pass
+# Function to create back button
 def create_back_button(parent, back_command):
     back_button = tk.Button(parent, text="Back", command=back_command)
     back_button.pack(pady=10)
     return back_button
+
 
 # Main function to run the application
 def main():
