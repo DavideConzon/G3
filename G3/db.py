@@ -128,3 +128,5 @@ class Database:
         patients = cursor.fetchall()
         conn.close()
         return patients
+    
+    
