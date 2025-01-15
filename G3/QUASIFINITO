@@ -240,6 +240,7 @@ def register_user(name, role, email, password):
     else:
         messagebox.showerror("Errore", "Errore durante la registrazione: Email già registrata.")
 
+
 # Function to login a user
 def login_user(email, password):
     if not email or not password:
@@ -250,8 +251,8 @@ def login_user(email, password):
     user = db.authenticate_user(email, hashed_password)  # Use the method from Database class
 
     if user:
+        user_id, name, role = user  # Unpacking user data (user_id, name, role)
         messagebox.showinfo("Successo", "Login effettuato con successo!")
-        name, role = user
         show_role_screen(name, role)  # Rimuovi il parametro password qui
     else:
         messagebox.showerror("Errore", "Credenziali non valide!")
@@ -485,8 +486,8 @@ def show_patient_registration_screen(user_name, user_role):
     buttons_frame.pack()
 
 
-
-# Function to save patient data
+# Supponendo che la password sia salvata in una variabile globale dopo il login
+global password  # La password deve essere definita in una parte iniziale dello script
 def save_patient(entries, user_name):
     # Extract values from the entries
     patient_data = {field: entries[field].get() for field in entries}
@@ -498,21 +499,30 @@ def save_patient(entries, user_name):
 
     # Retrieve the user_id from the current session
     db = Database()
-    user = db.authenticate_user(user_name, password)  # Passing user_name and password
+    user = db.authenticate_user(user_name, password)
     if user:
         user_id = user[0]  # The user ID is the first element returned
 
         # Call the add_patient method to save the patient's data
-        if db.add_patient(patient_data["Nome"], patient_data["Cognome"], patient_data["Data di Nascita"],
-                          patient_data["Sesso"], patient_data["Codice Fiscale"], patient_data["Indirizzo"],
-                          patient_data["Telefono"], patient_data["Email"], patient_data["Patologie Precedenti"],
-                          patient_data["Farmaci Assunti"], user_id):
+        if db.add_patient(
+            patient_data["Nome"],
+            patient_data["Cognome"],
+            patient_data["Data di Nascita"],
+            patient_data["Sesso"],
+            patient_data["Codice Fiscale"],
+            patient_data["Indirizzo"],
+            patient_data["Telefono"],
+            patient_data["Email"],
+            patient_data["Patologie Precedenti"],
+            patient_data["Farmaci Assunti"],
+            user_id,
+        ):
             messagebox.showinfo("Successo", "Paziente registrato con successo!")
         else:
             messagebox.showerror("Errore", "Codice Fiscale già esistente!")
     else:
         messagebox.showerror("Errore", "Utente non autenticato!")
-    pass
+
 # Function to create back button
 def create_back_button(parent, back_command):
     back_button = tk.Button(parent, text="Back", command=back_command)
