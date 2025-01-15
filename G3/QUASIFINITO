@@ -465,79 +465,80 @@ def show_role_screen(user_name, user_role):
     back_button = ttk.Button(camera_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
     back_button.pack(pady=10)
 
-   
-
-
 # Funzione per mostrare la schermata di registrazione del paziente
 def show_patient_registration_screen(user_name, user_role):
-    clear_frame()
+    # Crea una nuova finestra per la registrazione
+    registration_window = tk.Toplevel(root)  # Usa `root` come master principale
+    registration_window.title("Registrazione Paziente")
+    registration_window.geometry("800x600")
+    registration_window.config(bg='#f7f9fc')
 
-    # Crea il frame per la registrazione del paziente
-    registration_frame = tk.Frame(root, bg='#f7f9fc', padx=20, pady=20)
+    # Crea un frame principale all'interno della finestra
+    registration_frame = tk.Frame(registration_window, bg='#f7f9fc', padx=20, pady=20)
     registration_frame.pack(fill=tk.BOTH, expand=True)
 
-    # Titolo del form
+    # Inserisci qui i campi di input e altri widget
     tk.Label(registration_frame, text="Registra Paziente", font=("Arial", 16, "bold"), bg='#f7f9fc').pack(pady=20)
 
-    # Form dei dettagli del paziente
     fields = ["Nome", "Cognome", "Data di Nascita", "Sesso", "Codice Fiscale", "Indirizzo", "Telefono", "Email", "Patologie Precedenti", "Farmaci Assunti"]
     entries = {}
-
     for field in fields:
-        tk.Label(registration_frame, text=field + ":").pack(pady=5)
+        tk.Label(registration_frame, text=f"{field}:", bg='#f7f9fc').pack(pady=5, anchor="w")
         entry = tk.Entry(registration_frame)
-        entry.pack(pady=5)
+        entry.pack(pady=5, fill=tk.X)
         entries[field] = entry
 
-    # Frame per i pulsanti "Salva Paziente" e "Indietro"
+    # Aggiungi un frame per i pulsanti
     buttons_frame = tk.Frame(registration_frame, bg='#f7f9fc')
     buttons_frame.pack(fill=tk.X, pady=20)
 
-    # Bottone per inviare i dati del paziente (a sinistra)
-    submit_button = ttk.Button(buttons_frame, text="Salva Paziente", command=lambda: save_patient(entries, user_name))
-    submit_button.pack(side=tk.LEFT, padx=10)
+    # Bottone "Salva"
+    ttk.Button(buttons_frame, text="Salva Paziente", command=lambda: save_patient(entries)).pack(side=tk.LEFT, padx=10)
 
-    # Bottone per tornare alla schermata precedente (a destra)
-    create_back_button(buttons_frame, lambda: show_role_screen(user_name, user_role))
-    buttons_frame.pack()
+    # Bottone "Indietro"
+    ttk.Button(buttons_frame, text="Indietro", command=registration_window.destroy).pack(side=tk.RIGHT, padx=10)
+
+    # Associa l'evento del tasto "Enter" al salvataggio
+    registration_window.bind('<Return>', lambda event: save_patient(entries))
 
 
 # Supponendo che la password sia salvata in una variabile globale dopo il login
 global password  # La password deve essere definita in una parte iniziale dello script
-def save_patient(entries, user_name):
-    # Extract values from the entries
-    patient_data = {field: entries[field].get() for field in entries}
+def save_patient(entries):
+    # Estrarre i valori dai campi di input
+    nome = entries["Nome"].get()
+    cognome = entries["Cognome"].get()
+    data_nascita = entries["Data di Nascita"].get()
+    sesso = entries["Sesso"].get()
+    codice_fiscale = entries["Codice Fiscale"].get()
+    indirizzo = entries["Indirizzo"].get()
+    telefono = entries["Telefono"].get()
+    email = entries["Email"].get()
+    patologie_precedenti = entries["Patologie Precedenti"].get()
+    farmaci_assunti = entries["Farmaci Assunti"].get()
 
-    # Check for missing fields
-    if any(value == "" for value in patient_data.values()):
-        messagebox.showerror("Errore", "Tutti i campi sono obbligatori!")
+    # Verifica che tutti i campi obbligatori siano riempiti
+    if not all([nome, cognome, data_nascita, sesso, codice_fiscale, indirizzo, telefono, email]):
+        messagebox.showerror("Errore", "Tutti i campi obbligatori devono essere compilati!")
         return
 
-    # Retrieve the user_id from the current session
-    db = Database()
-    user = db.authenticate_user(user_name, password)
-    if user:
-        user_id = user[0]  # The user ID is the first element returned
+    # Salva i dati nel database
+    try:
+        conn = sqlite3.connect('app_data.db')  # Assicurati che il database sia configurato correttamente
+        cursor = conn.cursor()
 
-        # Call the add_patient method to save the patient's data
-        if db.add_patient(
-            patient_data["Nome"],
-            patient_data["Cognome"],
-            patient_data["Data di Nascita"],
-            patient_data["Sesso"],
-            patient_data["Codice Fiscale"],
-            patient_data["Indirizzo"],
-            patient_data["Telefono"],
-            patient_data["Email"],
-            patient_data["Patologie Precedenti"],
-            patient_data["Farmaci Assunti"],
-            user_id,
-        ):
-            messagebox.showinfo("Successo", "Paziente registrato con successo!")
-        else:
-            messagebox.showerror("Errore", "Codice Fiscale già esistente!")
-    else:
-        messagebox.showerror("Errore", "Utente non autenticato!")
+        # Query per inserire i dati del paziente
+        cursor.execute("""
+            INSERT INTO patients (nome, cognome, data_nascita, sesso, codice_fiscale, indirizzo, telefono, email, patologie_precedenti, farmaci_assunti)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (nome, cognome, data_nascita, sesso, codice_fiscale, indirizzo, telefono, email, patologie_precedenti, farmaci_assunti))
+
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Successo", "Dati del paziente salvati con successo!")
+    except Exception as e:
+        messagebox.showerror("Errore", f"Si è verificato un errore durante il salvataggio: {e}")
 
 # Function to create back button
 def create_back_button(parent, back_command):
@@ -551,7 +552,8 @@ def main():
     global root
     root = tk.Tk()
     root.title("Sistema di Gestione Pazienti")
-    root.geometry("800x600")
+    root.geometry("800x700")
+    root.resizable(True, True)
     show_login_screen()
     root.mainloop()
 
