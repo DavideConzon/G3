@@ -335,8 +335,10 @@ def show_patient_screen(name, email, user_role):
 
     else:
         tk.Label(root, text="No patient information found.", font=("Arial", 16)).pack(pady=20)
-        tk.Button(root, text="Registra Nuovo Paziente", command=lambda: show_patient_registration_screen(name, user_role)).pack(pady=10)
-
+       
+    login_frame = tk.Frame(root)
+    login_frame.pack(fill=tk.BOTH, expand=True)
+    create_back_button(login_frame, show_welcome_screen)
     
 # Function to show login screen
 def show_login_screen():
@@ -418,10 +420,6 @@ def show_role_screen(user_name, user_role):
     # Display user name and role
     tk.Label(role_frame, text=f"Welcome {user_name}, Role: {user_role}", font=("Arial", 16), bg='#f0f0f0', fg="#333").pack(pady=20)
 
-    # Modifica della chiamata nel bottone
-    register_patient_button = ttk.Button(role_frame, text="Registra Paziente", command=lambda: show_patient_registration_screen(user_name, user_role))
-    register_patient_button.pack(pady=20)
-
 
     # Set up the camera frame (existing functionality)
     camera_frame = tk.Frame(root, bg='#f0f0f0', padx=20, pady=20)
@@ -459,9 +457,15 @@ def show_role_screen(user_name, user_role):
     canvas.pack(pady=20)
     image_container = canvas.create_image(250, 250, anchor=tk.CENTER)
 
+     # Modifica della chiamata nel bottone
+    register_patient_button = ttk.Button(role_frame, text="Registra Paziente", command=lambda: show_patient_registration_screen(user_name, user_role))
+    register_patient_button.pack(pady=20)
+
     # Back Button to go to previous screen
     back_button = ttk.Button(camera_frame, text="Back", command=show_welcome_screen)  # Adjust command if necessary
     back_button.pack(pady=10)
+
+   
 
 
 # Funzione per mostrare la schermata di registrazione del paziente
