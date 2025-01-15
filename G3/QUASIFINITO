@@ -253,7 +253,12 @@ def login_user(email, password):
     if user:
         user_id, name, role = user  # Unpacking user data (user_id, name, role)
         messagebox.showinfo("Successo", "Login effettuato con successo!")
-        show_role_screen(name, role)  # Rimuovi il parametro password qui
+
+        # Decidi cosa mostrare in base al ruolo
+        if role == "User":
+            show_patient_screen(name, email, role)  # Visualizza la schermata dell'utente
+        else:
+            show_role_screen(name, role)  # Visualizza la schermata del medico/admin
     else:
         messagebox.showerror("Errore", "Credenziali non valide!")
 
@@ -306,7 +311,7 @@ def show_welcome_screen():
         back_button = ttk.Button(welcome_frame, text="Back", command=show_login_screen)
         back_button.pack(pady=10)
 
-def show_patient_screen(name, email):
+def show_patient_screen(name, email, user_role):
     clear_frame()
 
     # Fetch patient details from the database
@@ -317,13 +322,20 @@ def show_patient_screen(name, email):
     conn.close()
 
     if patient_data:
-        paziente = Paziente(*patient_data[1:])  # Ignoring the ID which is the first column
+        # Mostra i dettagli del paziente
+        paziente = Paziente(*patient_data[1:])  # Ignora l'ID che è la prima colonna
         tk.Label(root, text=f"Welcome, {paziente.nome} {paziente.cognome}", font=("Arial", 16)).pack(pady=20)
-        # You can now display attributes from the `Paziente` object, e.g.
         tk.Label(root, text=f"Date of Birth: {paziente.data_nascita}", font=("Arial", 12)).pack(pady=5)
-        # Continue for other attributes
+
+        # Puoi aggiungere altre informazioni del paziente qui
+        tk.Label(root, text=f"Email: {paziente.email}", font=("Arial", 12)).pack(pady=5)
+
+        # Bottone per aggiornare i dettagli del paziente
+        tk.Button(root, text="Aggiorna Dettagli", command=lambda: show_patient_registration_screen(name, user_role)).pack(pady=10)
+
     else:
         tk.Label(root, text="No patient information found.", font=("Arial", 16)).pack(pady=20)
+        tk.Button(root, text="Registra Nuovo Paziente", command=lambda: show_patient_registration_screen(name, user_role)).pack(pady=10)
 
     
 # Function to show login screen
