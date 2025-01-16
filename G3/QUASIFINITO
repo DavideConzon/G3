@@ -331,7 +331,7 @@ def show_patient_screen(name, email, user_role):
         tk.Label(root, text=f"Email: {paziente.email}", font=("Arial", 12)).pack(pady=5)
 
         # Bottone per aggiornare i dettagli del paziente
-        tk.Button(root, text="Aggiorna Dettagli", command=lambda: show_patient_registration_screen(name, user_role)).pack(pady=10)
+        #tk.Button(root, text="Aggiorna Dettagli", command=lambda: show_patient_registration_screen(name, user_role)).pack(pady=10)
 
     else:
         tk.Label(root, text="No patient information found.", font=("Arial", 16)).pack(pady=20)
